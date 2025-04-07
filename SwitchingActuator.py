@@ -5,6 +5,7 @@ import time
 import threading
 import customtkinter as ctk
 import serial.tools.list_ports  # Import to list available serial ports
+import configparser  # Import configparser to handle config.ini
 from pymodbus.server import StartSerialServer
 from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, ModbusServerContext  # Add this import
@@ -60,6 +61,11 @@ class RelayApp(ctk.CTk):
         self.title("Virtual Modbus Slave")
         self.geometry("800x600")  # Adjusted window size for side-by-side layout
 
+        # Load configuration from config.ini
+        self.config = configparser.ConfigParser()
+        self.config.read("config.ini")
+        self.serial_config = self.config["SerialConfig"]
+
         # Create main frames for layout
         self.config_frame = ctk.CTkFrame(self, width=300)
         self.config_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
@@ -75,31 +81,57 @@ class RelayApp(ctk.CTk):
         # Configuration Section (Left)
         ctk.CTkLabel(self.config_frame, text="Serial Configuration:").pack(pady=10)
 
+        ctk.CTkLabel(self.config_frame, text="Slave ID:").pack(pady=2)
+        self.slave_id_entry = ctk.CTkEntry(
+            self.config_frame, placeholder_text="Enter Slave ID (e.g., 1)"
+        )
+        self.slave_id_entry.insert(0, self.serial_config.get("slave_id", "1"))
+        self.slave_id_entry.pack(pady=5)
+
         ctk.CTkLabel(self.config_frame, text="Serial Port:").pack(pady=2)
         self.serial_ports = self.get_serial_ports()
-        self.serial_port_menu = ctk.CTkOptionMenu(self.config_frame, values=self.serial_ports)
+        self.serial_port_menu = ctk.CTkOptionMenu(
+            self.config_frame, values=self.serial_ports
+        )
+        self.serial_port_menu.set(self.serial_config.get("serial_port", "COM9"))
         self.serial_port_menu.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Baud Rate:").pack(pady=2)
-        self.baudrate_entry = ctk.CTkEntry(self.config_frame, placeholder_text="9600")
+        self.baudrate_entry = ctk.CTkEntry(
+            self.config_frame, placeholder_text="Enter Baud Rate (e.g., 9600)"
+        )
+        self.baudrate_entry.insert(0, self.serial_config.get("baudrate", "9600"))
         self.baudrate_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Parity:").pack(pady=2)
-        self.parity_entry = ctk.CTkEntry(self.config_frame, placeholder_text="N (None)")
+        self.parity_entry = ctk.CTkEntry(
+            self.config_frame, placeholder_text="Enter Parity (e.g., N)"
+        )
+        self.parity_entry.insert(0, self.serial_config.get("parity", "N"))
         self.parity_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Stop Bits:").pack(pady=2)
-        self.stopbits_entry = ctk.CTkEntry(self.config_frame, placeholder_text="1")
+        self.stopbits_entry = ctk.CTkEntry(
+            self.config_frame, placeholder_text="Enter Stop Bits (e.g., 1)"
+        )
+        self.stopbits_entry.insert(0, self.serial_config.get("stopbits", "1"))
         self.stopbits_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Byte Size:").pack(pady=2)
-        self.bytesize_entry = ctk.CTkEntry(self.config_frame, placeholder_text="8")
+        self.bytesize_entry = ctk.CTkEntry(
+            self.config_frame, placeholder_text="Enter Byte Size (e.g., 8)"
+        )
+        self.bytesize_entry.insert(0, self.serial_config.get("bytesize", "8"))
         self.bytesize_entry.pack(pady=5)
 
-        self.start_button = ctk.CTkButton(self.config_frame, text="Start Server", command=self.start_server)
+        self.start_button = ctk.CTkButton(
+            self.config_frame, text="Start Server", command=self.start_server
+        )
         self.start_button.pack(pady=10)
 
-        self.update_serial_button = ctk.CTkButton(self.config_frame, text="Update Serial Config", command=self.update_serial_config)
+        self.update_serial_button = ctk.CTkButton(
+            self.config_frame, text="Update Serial Config", command=self.update_serial_config
+        )
         self.update_serial_button.pack(pady=10)
 
         self.feedback_label = ctk.CTkLabel(self.config_frame, text="", text_color="green")
@@ -141,8 +173,10 @@ class RelayApp(ctk.CTk):
 
     def start_server(self):
         serial_port = self.serial_port_menu.get()
+        slave_id = self.slave_id_entry.get()
+        slave_id = int(slave_id) if slave_id.isdigit() else 1  # Default to 1 if invalid
         baudrate = self.baudrate_entry.get()
-        baudrate = int(baudrate) if baudrate.isdigit() else 9600  # Use default 9600 if input is invalid
+        baudrate = int(baudrate) if baudrate.isdigit() else 9600  # Use default 9600 if invalid
         parity = self.parity_entry.get()
         stopbits = self.stopbits_entry.get()
         stopbits = int(stopbits) if stopbits.isdigit() else 1  # Default to 1 if invalid
@@ -150,26 +184,49 @@ class RelayApp(ctk.CTk):
         bytesize = int(bytesize) if bytesize.isdigit() else 8  # Default to 8 if invalid
 
         self.relay_device = RelayDevice(baudrate, parity, stopbits, bytesize)
+        self.relay_device.slave_id = slave_id  # Set the selected slave ID
         self.relay_device.serial_port = serial_port  # Set the selected serial port
-        self.feedback_label.configure(text="Server started")
+        self.feedback_label.configure(text="Server started with Slave ID: " + str(slave_id))
 
     def update_serial_config(self):
+        """Update the serial configuration and save to config.ini."""
         if self.relay_device:
             try:
                 serial_port = self.serial_port_menu.get()
+                slave_id = self.slave_id_entry.get()
+                slave_id = int(slave_id) if slave_id.isdigit() else 1  # Default to 1 if invalid
                 baudrate = self.baudrate_entry.get()
-                baudrate = int(baudrate) if baudrate.isdigit() else 9600  # Use default 9600 if input is invalid
+                baudrate = int(baudrate) if baudrate.isdigit() else 9600  # Use default 9600 if invalid
                 parity = self.parity_entry.get()
                 stopbits = self.stopbits_entry.get()
                 stopbits = int(stopbits) if stopbits.isdigit() else 1  # Default to 1 if invalid
                 bytesize = self.bytesize_entry.get()
                 bytesize = int(bytesize) if bytesize.isdigit() else 8  # Default to 8 if invalid
 
+                # Update the relay device configuration
+                self.relay_device.slave_id = slave_id
                 self.relay_device.configure_serial(baudrate, parity, stopbits, bytesize)
-                self.relay_device.serial_port = serial_port  # Update the serial port
-                self.feedback_label.configure(text="Serial configuration updated successfully.")
+                self.relay_device.serial_port = serial_port
+
+                # Save the updated configuration to config.ini
+                self.config["SerialConfig"] = {
+                    "slave_id": str(slave_id),
+                    "baudrate": str(baudrate),
+                    "parity": parity,
+                    "stopbits": str(stopbits),
+                    "bytesize": str(bytesize),
+                    "serial_port": serial_port,
+                }
+                with open("config.ini", "w") as configfile:
+                    self.config.write(configfile)
+
+                self.feedback_label.configure(
+                    text="Serial configuration updated successfully with Slave ID: " + str(slave_id)
+                )
             except ValueError:
-                self.feedback_label.configure(text="Invalid values. Please check your input.", text_color="red")
+                self.feedback_label.configure(
+                    text="Invalid values. Please check your input.", text_color="red"
+                )
 
     def toggle_relay(self, index):
         # Toggle the relay state
