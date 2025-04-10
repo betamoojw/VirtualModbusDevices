@@ -14,7 +14,7 @@ from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, Modbus
 class RelayDevice:
     def __init__(self, baudrate=9600, parity='N', stopbits=1, bytesize=8):
         self.slave_id = 1
-        self.start_address = 0x0430  # Starting address in hexadecimal
+        self.start_address = 0x0032  # Starting address in hexadecimal
         self.store = ModbusSparseDataBlock({
             self.start_address + i: 0 for i in range(16)  # Initialize 16 relays with consecutive addresses
         })
@@ -255,12 +255,15 @@ class RelayApp(ctk.CTk):
 
         # Calculate CRC using the custom calculate_crc function
         crc = calculate_crc(modbus_frame)
+        crc_lsb = crc & 0xFF  # Least significant byte
+        crc_msb = (crc >> 8) & 0xFF  # Most significant byte
 
         # Print the Modbus address, state, slave ID, function code, and CRC in hexadecimal
         print(f"Relay {index + 1} at address {relay_address:#06x} set to {'ON' if self.relay_states[index] else 'OFF'}")
         print(f"Slave ID: {slave_id:#04x}, Function Code: {function_code:#04x}")
         print(f"Address: {relay_address:#06x}, Data: {register_data:#06x}")
-        print(f"CRC: {crc:#06x}")
+        print(f"CRC: {crc_msb:#04x} {crc_lsb:#04x}")  # Print CRC
+        print(f"CRC (swapped): {crc_lsb:#04x} {crc_msb:#04x}")  # Print swapped CRC
 
         # Update the relay button states in the GUI
         self.update_relay_buttons()
