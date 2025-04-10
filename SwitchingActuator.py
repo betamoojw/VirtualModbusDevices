@@ -12,12 +12,14 @@ from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, Modbus
 
 # Configuration for Modbus
 class RelayDevice:
-    def __init__(self, baudrate=9600, parity='N', stopbits=1, bytesize=8):
+    def __init__(self, app, baudrate=9600, parity='N', stopbits=1, bytesize=8):
         self.slave_id = 1
+        # self.start_address = 0x0430  # Starting address in hexadecimal
         self.start_address = 0x0032  # Starting address in hexadecimal
-        self.store = ModbusSparseDataBlock({
-            self.start_address + i: 0 for i in range(16)  # Initialize 16 relays with consecutive addresses
-        })
+        self.store = CallbackDataBlock(
+            {self.start_address + i: 0 for i in range(16)},  # Initialize 16 relays
+            lambda address, value: relay_callback(address, value, app)  # Pass the app instance
+        )
 
         self.baudrate = baudrate
         self.parity = parity
@@ -31,8 +33,8 @@ class RelayDevice:
         # Use ModbusSlaveContext instead of ModbusContext
         context = ModbusSlaveContext(
             di=None,
-            co=self.store,
-            hr=None,
+            co=None,
+            hr=self.store,  # Use holding registers for relay control
             ir=None,
         )
         # Wrap the context in a ModbusServerContext
@@ -53,7 +55,6 @@ class RelayDevice:
     def restart_rtu_server(self):
         print("Restarting RTU server with new parameters")
         self.start_rtu_server()
-
 
 # GUI Application
 class RelayApp(ctk.CTk):
@@ -184,7 +185,7 @@ class RelayApp(ctk.CTk):
         bytesize = self.bytesize_entry.get()
         bytesize = int(bytesize) if bytesize.isdigit() else 8  # Default to 8 if invalid
 
-        self.relay_device = RelayDevice(baudrate, parity, stopbits, bytesize)
+        self.relay_device = RelayDevice(self, baudrate, parity, stopbits, bytesize)  # Pass self (app instance)
         self.relay_device.slave_id = slave_id  # Set the selected slave ID
         self.relay_device.serial_port = serial_port  # Set the selected serial port
         self.feedback_label.configure(text="Server started with Slave ID: " + str(slave_id))
@@ -237,7 +238,7 @@ class RelayApp(ctk.CTk):
         relay_address = self.relay_device.start_address + index
 
         # Update the Modbus store with the new relay state
-        self.relay_device.store.setValues(3, relay_address, [1 if self.relay_states[index] else 0])  # 3 = Holding Register
+        self.relay_device.store.setValues(relay_address, [1 if self.relay_states[index] else 0])  # Pass correct arguments
 
         # Determine the register data based on the relay state
         register_data = 0x0001 if self.relay_states[index] else 0x0000
@@ -248,7 +249,7 @@ class RelayApp(ctk.CTk):
         address_high = (relay_address >> 8) & 0xFF
         address_low = relay_address & 0xFF
         data_high = (register_data >> 8) & 0xFF
-        data_low = register_data & 0xFF
+        data_low = (register_data) & 0xFF
 
         # Construct the Modbus frame
         modbus_frame = bytes([slave_id, function_code, address_high, address_low, data_high, data_low])
@@ -300,7 +301,6 @@ class RelayApp(ctk.CTk):
         else:
             self.led_indicator.configure(text="LED OFF", text_color="red")
 
-
 def calculate_crc(data):
     """Calculate the Modbus CRC16 checksum."""
     crc = 0xFFFF
@@ -313,6 +313,23 @@ def calculate_crc(data):
                 crc >>= 1
     return crc
 
+class CallbackDataBlock(ModbusSparseDataBlock):
+    def __init__(self, values, callback):
+        super().__init__(values)
+        self.callback = callback
+
+    def setValues(self, address, values):
+        super().setValues(address, values)  # Pass the correct arguments to the parent method
+        self.callback(address, values)  # Trigger the callback
+
+def relay_callback(address, value, app):
+    # relay_index = address - 0x0430  # Calculate the relay index based on the address
+    relay_index = address - 0x0032  # Calculate the relay index based on the address
+    if 0 <= relay_index < 16:  # Ensure the address is within the relay range
+        state = bool(value[0])  # Get the relay state (ON/OFF)
+        app.relay_states[relay_index] = state
+        app.update_relay_buttons()
+        print(f"Relay {relay_index + 1} set to {'ON' if state else 'OFF'} via Modbus master")
 
 def main():
     # Change the current working directory to so that opening relative paths/files will work
