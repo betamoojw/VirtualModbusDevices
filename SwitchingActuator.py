@@ -14,8 +14,9 @@ from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, Modbus
 class RelayDevice:
     def __init__(self, baudrate=9600, parity='N', stopbits=1, bytesize=8):
         self.slave_id = 1
+        self.start_address = 0x0430  # Starting address in hexadecimal
         self.store = ModbusSparseDataBlock({
-            0: 0  # Relay status
+            self.start_address + i: 0 for i in range(16)  # Initialize 16 relays with consecutive addresses
         })
 
         self.baudrate = baudrate
@@ -59,7 +60,7 @@ class RelayApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Virtual Modbus Slave")
-        self.geometry("800x600")  # Adjusted window size for side-by-side layout
+        self.geometry("860x680")  # Adjusted window size for side-by-side layout
 
         # Load configuration from config.ini
         self.config = configparser.ConfigParser()
@@ -232,16 +233,34 @@ class RelayApp(ctk.CTk):
         # Toggle the relay state
         self.relay_states[index] = not self.relay_states[index]
 
-        # Update the Modbus store with the new relay states
-        coil_values = [1 if state else 0 for state in self.relay_states]
-        self.relay_device.store.setValues(0, 0, coil_values)
+        # Calculate the Modbus address for the relay
+        relay_address = self.relay_device.start_address + index
 
-        # Convert the coil values to a hexadecimal representation
-        coil_binary = ''.join(str(bit) for bit in reversed(coil_values))  # Reverse for LSB first
-        coil_hex = hex(int(coil_binary, 2))  # Convert binary string to hex
+        # Update the Modbus store with the new relay state
+        self.relay_device.store.setValues(3, relay_address, [1 if self.relay_states[index] else 0])  # 3 = Holding Register
 
-        # Print the Modbus code in hexadecimal
-        print(f"Modbus code (hex): {coil_hex}")
+        # Determine the register data based on the relay state
+        register_data = 0x0001 if self.relay_states[index] else 0x0000
+
+        # Modbus frame components
+        slave_id = self.relay_device.slave_id
+        function_code = 0x06  # Function code for writing a single register
+        address_high = (relay_address >> 8) & 0xFF
+        address_low = relay_address & 0xFF
+        data_high = (register_data >> 8) & 0xFF
+        data_low = register_data & 0xFF
+
+        # Construct the Modbus frame
+        modbus_frame = bytes([slave_id, function_code, address_high, address_low, data_high, data_low])
+
+        # Calculate CRC using the custom calculate_crc function
+        crc = calculate_crc(modbus_frame)
+
+        # Print the Modbus address, state, slave ID, function code, and CRC in hexadecimal
+        print(f"Relay {index + 1} at address {relay_address:#06x} set to {'ON' if self.relay_states[index] else 'OFF'}")
+        print(f"Slave ID: {slave_id:#04x}, Function Code: {function_code:#04x}")
+        print(f"Address: {relay_address:#06x}, Data: {register_data:#06x}")
+        print(f"CRC: {crc:#06x}")
 
         # Update the relay button states in the GUI
         self.update_relay_buttons()
@@ -257,7 +276,7 @@ class RelayApp(ctk.CTk):
             self.after(100, self.check_switch_duration)
         else:  # if already pressed
             duration = time.time() - self.press_start_time
-            if duration >= 5:  # If long pressed for more than 5 seconds
+            if (duration >= 5):  # If long pressed for more than 5 seconds
                 self.enable_relay_timing()
                 self.toggle_led_indicator(True)
             self.press_start_time = None
@@ -277,6 +296,19 @@ class RelayApp(ctk.CTk):
             self.led_indicator.configure(text="LED ON", text_color="green")
         else:
             self.led_indicator.configure(text="LED OFF", text_color="red")
+
+
+def calculate_crc(data):
+    """Calculate the Modbus CRC16 checksum."""
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x0001:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+    return crc
 
 
 def main():
