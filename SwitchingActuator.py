@@ -329,7 +329,12 @@ def relay_callback(address, value, app):
         state = bool(value[0])  # Get the relay state (ON/OFF)
         app.relay_states[relay_index] = state
         app.update_relay_buttons()
-        print(f"Relay {relay_index + 1} set to {'ON' if state else 'OFF'} via Modbus master")
+
+        # Print the raw data received from RS485
+        print(f"Received Modbus data from RS485:")
+        print(f"  Address: {address:#06x}")
+        print(f"  Value: {value}")
+        print(f"  Relay {relay_index + 1} set to {'ON' if state else 'OFF'} via Modbus master")
 
 def main():
     # Change the current working directory to so that opening relative paths/files will work
