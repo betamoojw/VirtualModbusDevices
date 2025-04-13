@@ -3,6 +3,7 @@
 import os
 import time
 import threading
+import queue
 import customtkinter as ctk
 import serial.tools.list_ports  # Import to list available serial ports
 import configparser  # Import configparser to handle config.ini
@@ -11,11 +12,8 @@ from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, ModbusServerContext  # Add this import
 import serial  # Import pyserial for sending Modbus data
 import traceback  # Import traceback for detailed error logging
+from pymodbus.framer.rtu import FramerRTU  # Import the RTU framer
 
-# List available serial ports
-ports = serial.tools.list_ports.comports()
-for port in ports:
-    print(port.device)
 
 # Configuration for Modbus
 class RelayDevice:
@@ -58,7 +56,7 @@ class RelayDevice:
                 parity=self.parity,
                 stopbits=self.stopbits,
                 bytesize=self.bytesize,
-                framer=None,  # Default framer
+                framer=FramerRTU,  # Specify the correct framer for RTU
                 handle_local_echo=False,  # Disable local echo
                 custom_functions=None,  # Default Modbus functions
                 on_data_received=self.log_serial_data  # Add a callback for logging raw data
@@ -123,9 +121,10 @@ class RelayDevice:
             modbus_frame += bytes([crc_lsb, crc_msb])
 
             # Open the serial port and send the frame
-            with serial.Serial(self.serial_port, self.baudrate, parity=self.parity, stopbits=self.stopbits, bytesize=self.bytesize, timeout=1) as ser:
-                ser.write(modbus_frame)
-                print(f"Sent Modbus frame: {modbus_frame.hex()}")
+            # with serial.Serial(self.serial_port, self.baudrate, parity=self.parity, stopbits=self.stopbits, bytesize=self.bytesize, timeout=1) as ser:
+            #     ser.write(modbus_frame)
+            #     print(f"Sent Modbus frame: {modbus_frame.hex()}")
+            print(f"Sent Modbus frame: {modbus_frame.hex()}")
 
         except Exception as e:
             print(f"Error sending Modbus data: {e}")
@@ -223,8 +222,14 @@ class RelayApp(ctk.CTk):
         for i in range(16):
             row = i // 2  # Determine the row (0-7)
             col = i % 2   # Determine the column (0-1)
-            btn = ctk.CTkButton(self.relay_frame, text=f"Relay {i+1}", command=lambda i=i: self.toggle_relay(i))
-            btn.grid(row=row + 1, column=col, padx=5, pady=5, sticky="nsew")
+            btn = ctk.CTkButton(
+                self.relay_frame,
+                text=f"Relay {i+1}",
+                command=lambda i=i: self.toggle_relay(i),
+                border_width=2  # Set the border width to make it more bold
+            )
+            # Set padding for the button
+            btn.grid(row=row + 1, column=col, padx=10, pady=10, sticky="nsew")  # Adjust padx and pady as needed
             self.relay_buttons.append(btn)
 
         # Configure grid weights for relay buttons
@@ -233,7 +238,12 @@ class RelayApp(ctk.CTk):
         for c in range(2):  # 2 columns
             self.relay_frame.grid_columnconfigure(c, weight=1)
 
-        self.switch_button = ctk.CTkButton(self.relay_frame, text="Manual Switch", command=self.manual_switch_press)
+        self.switch_button = ctk.CTkButton(
+            self.relay_frame,
+            text="Manual Switch",
+            command=self.manual_switch_press,
+            border_width=2  # Set the border width to make it more bold
+        )
         self.switch_button.grid(row=9, column=0, columnspan=2, pady=10)
 
         self.led_indicator = ctk.CTkLabel(self.relay_frame, text="LED OFF", text_color="red")
@@ -242,9 +252,22 @@ class RelayApp(ctk.CTk):
         # Long press variables
         self.press_start_time = None
 
+        # Create a queue for communication between threads
+        self.serial_queue = queue.Queue()
+
+        # Start the serial communication thread
+        self.serial_thread = threading.Thread(target=self.handle_serial_communication, daemon=True)
+        self.serial_thread.start()
+
+        # Schedule serial data processing
+        self.after(100, self.process_serial_data)
+
     def get_serial_ports(self):
         """Retrieve a list of available serial ports."""
         ports = serial.tools.list_ports.comports()
+        port_list = [port.device for port in ports] or ["COM9"]  # Default to COM9 if no ports found
+        print(f"Available ports: {', '.join(port_list)}")  # Print ports in one line
+        
         return [port.device for port in ports] or ["COM9"]  # Default to COM9 if no ports found
 
     def start_server(self):
@@ -305,6 +328,15 @@ class RelayApp(ctk.CTk):
                 )
 
     def toggle_relay(self, index):
+        # Check if the relay device is initialized
+        if not hasattr(self, "relay_device") or self.relay_device is None:
+            print("Error: Relay device is not initialized. Please start the server first.")
+            self.feedback_label.configure(
+                text="Error: Relay device is not initialized. Start the server first.",
+                text_color="red",
+            )
+            return
+
         # Toggle the relay state
         self.relay_states[index] = not self.relay_states[index]
 
@@ -325,7 +357,15 @@ class RelayApp(ctk.CTk):
 
     def update_relay_buttons(self):
         for i, state in enumerate(self.relay_states):
-            self.relay_buttons[i].configure(bg_color="green" if state else "red", text=f"Relay {i+1} {'ON' if state else 'OFF'}")
+            self.relay_buttons[i].configure(
+            bg_color="green" if state else "red",  # Background color
+            text_color="green" if state else "red",  # Text color for better contrast
+            text=f"Relay {i+1} {'ON' if state else 'OFF'}",
+            font=("Arial", 12, "bold")  # Set font to bold
+        )
+        for btn in self.relay_buttons:
+            btn.configure(state="normal")
+            # btn.configure(state="disabled")
 
     def manual_switch_press(self):
         if self.press_start_time is None:  # if not pressed
@@ -354,6 +394,80 @@ class RelayApp(ctk.CTk):
             self.led_indicator.configure(text="LED ON", text_color="green")
         else:
             self.led_indicator.configure(text="LED OFF", text_color="red")
+
+    def handle_serial_communication(self):
+        """Handle serial communication in a separate thread."""
+        try:
+            with serial.Serial(
+                port=self.serial_port_menu.get(),
+                baudrate=int(self.baudrate_entry.get()),
+                parity=self.parity_entry.get(),
+                stopbits=int(self.stopbits_entry.get()),
+                bytesize=int(self.bytesize_entry.get()),
+                timeout=1
+            ) as ser:
+                print("Serial communication thread started.")
+                while True:
+                    # Read data from the serial port
+                    data = ser.read(1024)  # Adjust the buffer size as needed
+                    if data:
+                        print(f"Data received: {data.hex()}")
+                        self.serial_queue.put(data)  # Add data to the queue for processing
+
+                        # Example: Echo the data back
+                        ser.write(data)
+                        print(f"Data echoed back: {data.hex()}")
+        except Exception as e:
+            print(f"Error in serial communication thread: {e}")
+
+    def process_serial_data(self):
+        """Process data received from the serial thread."""
+        while not self.serial_queue.empty():
+            data = self.serial_queue.get()
+
+            # Process the data (e.g., parse Modbus frame and update GUI)
+            try:
+                print(f"Processing data: {data.hex()}")
+
+                # Parse the Modbus frame
+                if len(data) >= 8:  # Minimum Modbus RTU frame length
+                    slave_id = data[0]
+                    function_code = data[1]
+                    address = (data[2] << 8) | data[3]
+                    value = (data[4] << 8) | data[5]
+                    crc_received = (data[-2] | (data[-1] << 8))
+
+                    # Validate CRC
+                    crc_calculated = calculate_crc(data[:-2])  # Exclude the last two CRC bytes
+                    if crc_calculated != crc_received:
+                        print(f"CRC validation failed. Received: {crc_received:#06x}, Calculated: {crc_calculated:#06x}")
+                        continue
+
+                    # Handle Modbus logic based on function code
+                    if function_code == 0x06:  # Write Single Register
+                        relay_index = address - 0x0032  # Calculate relay index
+                        if 0 <= relay_index < len(self.relay_states):
+                            self.relay_states[relay_index] = bool(value)
+                            print(f"Relay {relay_index + 1} set to {'ON' if value else 'OFF'}")
+                            self.update_relay_buttons()
+                        else:
+                            print(f"Invalid relay address: {address:#06x}")
+
+                    elif function_code == 0x03:  # Read Holding Registers
+                        print(f"Read request received for address {address:#06x}, value: {value}")
+                        # Handle read requests if needed (e.g., respond with register values)
+
+                    else:
+                        print(f"Unsupported function code: {function_code}")
+
+                else:
+                    print("Invalid Modbus frame received.")
+
+            except Exception as e:
+                print(f"Error processing serial data: {e}")
+
+        # Schedule the next check
+        self.after(100, self.process_serial_data)
 
 def calculate_crc(data):
     """Calculate the Modbus CRC16 checksum."""
