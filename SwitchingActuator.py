@@ -141,13 +141,13 @@ class RelayApp(ctk.CTk):
         self.relay_states = [False] * 16  # Default to all relays OFF
         self.relay_buttons = []
 
-        # Load relay states from file
-        self.load_relay_states()
-
         # Load configuration from config.ini
         self.config = configparser.ConfigParser()
         self.config.read("config.ini")
         self.serial_config = self.config["SerialConfig"]
+
+        # Load Switching Actuator Data
+        self.load_switching_actuator_data()
 
         # Create main frames for layout
         self.config_frame = ctk.CTkFrame(self, width=300)
@@ -227,9 +227,9 @@ class RelayApp(ctk.CTk):
         self.relay_buttons = []
 
         # Create 16 relay buttons in an 8x2 grid
-        for i in range(16):
-            row = i // 2  # Determine the row (0-7)
-            col = i % 2   # Determine the column (0-1)
+        for i in range(self.relay_quantity):
+            row = i // 2
+            col = i % 2
             btn = ctk.CTkButton(
                 self.relay_frame,
                 text=f"Relay {i+1}",
@@ -269,9 +269,6 @@ class RelayApp(ctk.CTk):
 
         # Schedule serial data processing
         self.after(100, self.process_serial_data)
-
-        # Load relay states from file
-        self.load_relay_states()
 
     def get_serial_ports(self):
         """Retrieve a list of available serial ports."""
@@ -371,16 +368,15 @@ class RelayApp(ctk.CTk):
         self.save_relay_states()
 
     def update_relay_buttons(self):
+        """Update the relay buttons in the GUI based on the current relay states."""
         for i, state in enumerate(self.relay_states):
-            self.relay_buttons[i].configure(
-            bg_color="green" if state else "red",  # Background color
-            text_color="green" if state else "red",  # Text color for better contrast
-            text=f"Relay {i+1} {'ON' if state else 'OFF'}",
-            font=("Arial", 12, "bold")  # Set font to bold
-        )
-        for btn in self.relay_buttons:
-            btn.configure(state="normal")
-            # btn.configure(state="disabled")
+            if i < len(self.relay_buttons):
+                self.relay_buttons[i].configure(
+                    text=f"Relay {i+1} {'ON' if state else 'OFF'}",
+                    bg_color="green" if state else "red",
+                    text_color="white" if state else "black",
+                    font=("Arial", 12, "bold")  # Set font to bold
+                )
 
     def manual_switch_press(self):
         if self.press_start_time is None:  # if not pressed
@@ -486,25 +482,43 @@ class RelayApp(ctk.CTk):
         self.after(100, self.process_serial_data)
 
     def save_relay_states(self):
-        """Save the current relay states to a file."""
+        """Save the current relay states to the SwitchingActuatorData.json file."""
         try:
-            with open("relay_states.json", "w") as file:
-                json.dump(self.relay_states, file)
+            data = {
+                "type": self.relay_type,
+                "quantity": self.relay_quantity,
+                "data": [{"name": f"Relay#{i+1}", "value": state} for i, state in enumerate(self.relay_states)]
+            }
+            with open("SwitchingActuatorData.json", "w") as file:
+                json.dump(data, file, indent=4)
             print("Relay states saved successfully.")
         except Exception as e:
             print(f"Error saving relay states: {e}")
 
-    def load_relay_states(self):
-        """Load relay states from a file and update the GUI."""
+    def load_switching_actuator_data(self):
+        """Load and parse the SwitchingActuatorData.json file."""
         try:
-            with open("relay_states.json", "r") as file:
-                self.relay_states = json.load(file)
-            print("Relay states loaded successfully.")
-            self.update_relay_buttons()  # Update the GUI with the loaded states
+            with open("SwitchingActuatorData.json", "r") as file:
+                data = json.load(file)
+                print("Switching Actuator Data loaded successfully.")
+
+                # Parse the data
+                self.relay_type = data.get("type", "unknown")
+                self.relay_quantity = data.get("quantity", 0)
+                self.relay_data = data.get("data", [])
+
+                # Initialize relay states based on the quantity
+                self.relay_states = [relay.get("value", 0) for relay in self.relay_data]
+
+                # Update the GUI with the loaded data
+                self.update_relay_buttons()
         except FileNotFoundError:
-            print("Relay states file not found. Using default states.")
+            print("SwitchingActuatorData.json file not found. Using default values.")
+            self.relay_type = "switchingActuator"
+            self.relay_quantity = 16
+            self.relay_states = [0] * self.relay_quantity
         except Exception as e:
-            print(f"Error loading relay states: {e}")
+            print(f"Error loading SwitchingActuatorData.json: {e}")
 
 def calculate_crc(data):
     """Calculate the Modbus CRC16 checksum."""

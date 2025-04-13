@@ -2,21 +2,69 @@
     "type": "switchingActuator",
     "quantity": 16,
     "data": [
-        {"name": "Relay#1", "value": 1},
-        {"name": "Relay#2", "value": 0},
-        {"name": "Relay#3", "value": 1},
-        {"name": "Relay#4", "value": 0},
-        {"name": "Relay#5", "value": 0},
-        {"name": "Relay#6", "value": 0},
-        {"name": "Relay#7", "value": 0},
-        {"name": "Relay#8", "value": 0},
-        {"name": "Relay#9", "value": 0},
-        {"name": "Relay#10", "value": 0},
-        {"name": "Relay#11", "value": 0},
-        {"name": "Relay#12", "value": 0},
-        {"name": "Relay#13", "value": 0},
-        {"name": "Relay#14", "value": 0},
-        {"name": "Relay#15", "value": 0},
-        {"name": "Relay#16", "value": 0}
+        {
+            "name": "Relay#1",
+            "value": false
+        },
+        {
+            "name": "Relay#2",
+            "value": false
+        },
+        {
+            "name": "Relay#3",
+            "value": true
+        },
+        {
+            "name": "Relay#4",
+            "value": false
+        },
+        {
+            "name": "Relay#5",
+            "value": true
+        },
+        {
+            "name": "Relay#6",
+            "value": true
+        },
+        {
+            "name": "Relay#7",
+            "value": true
+        },
+        {
+            "name": "Relay#8",
+            "value": true
+        },
+        {
+            "name": "Relay#9",
+            "value": true
+        },
+        {
+            "name": "Relay#10",
+            "value": true
+        },
+        {
+            "name": "Relay#11",
+            "value": false
+        },
+        {
+            "name": "Relay#12",
+            "value": false
+        },
+        {
+            "name": "Relay#13",
+            "value": false
+        },
+        {
+            "name": "Relay#14",
+            "value": false
+        },
+        {
+            "name": "Relay#15",
+            "value": false
+        },
+        {
+            "name": "Relay#16",
+            "value": false
+        }
     ]
 }
