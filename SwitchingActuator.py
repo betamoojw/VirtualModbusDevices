@@ -9,6 +9,13 @@ import configparser  # Import configparser to handle config.ini
 from pymodbus.server import StartSerialServer
 from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, ModbusServerContext  # Add this import
+import serial  # Import pyserial for sending Modbus data
+import traceback  # Import traceback for detailed error logging
+
+# List available serial ports
+ports = serial.tools.list_ports.comports()
+for port in ports:
+    print(port.device)
 
 # Configuration for Modbus
 class RelayDevice:
@@ -42,8 +49,45 @@ class RelayDevice:
         threading.Thread(target=self.run_rtu_server, args=(server_context,), daemon=True).start()
 
     def run_rtu_server(self, context):
-        StartSerialServer(context, port=self.serial_port, baudrate=self.baudrate,
-                          parity=self.parity, stopbits=self.stopbits, bytesize=self.bytesize)
+        print(f"Starting Modbus RTU server on {self.serial_port}...")
+        try:
+            StartSerialServer(
+                context,
+                port=self.serial_port,
+                baudrate=self.baudrate,
+                parity=self.parity,
+                stopbits=self.stopbits,
+                bytesize=self.bytesize,
+                framer=None,  # Default framer
+                handle_local_echo=False,  # Disable local echo
+                custom_functions=None,  # Default Modbus functions
+                on_data_received=self.log_serial_data  # Add a callback for logging raw data
+            )
+        except Exception as e:
+            print(f"Error starting Modbus RTU server: {e}")
+            traceback.print_exc()  # Print the full exception traceback
+
+    def log_serial_data(self, data):
+        """Log and parse raw data received from the serial port."""
+        print(f"Raw data received from serial port: {data.hex()}")
+
+        # Parse the Modbus frame
+        if len(data) >= 8:  # Minimum Modbus RTU frame length
+            slave_id = data[0]
+            function_code = data[1]
+            address = (data[2] << 8) | data[3]
+            value = (data[4] << 8) | data[5]
+            crc_received = (data[-2] | (data[-1] << 8))
+
+            # Log parsed data
+            print(f"Parsed Modbus Frame:")
+            print(f"  Slave ID: {slave_id}")
+            print(f"  Function Code: {function_code}")
+            print(f"  Address: {address:#06x}")
+            print(f"  Value: {value:#06x}")
+            print(f"  CRC Received: {crc_received:#06x}")
+        else:
+            print("Invalid Modbus frame received.")
 
     def configure_serial(self, baudrate, parity, stopbits, bytesize):
         self.baudrate = baudrate
@@ -55,6 +99,36 @@ class RelayDevice:
     def restart_rtu_server(self):
         print("Restarting RTU server with new parameters")
         self.start_rtu_server()
+
+    def send_modbus_data(self, address, value):
+        """Send Modbus data to control relays or communicate states."""
+        try:
+            # Construct the Modbus frame
+            slave_id = self.slave_id
+            function_code = 0x06  # Function code for writing a single register
+            address_high = (address >> 8) & 0xFF
+            address_low = address & 0xFF
+            value_high = (value >> 8) & 0xFF
+            value_low = value & 0xFF
+
+            # Create the Modbus frame
+            modbus_frame = bytes([slave_id, function_code, address_high, address_low, value_high, value_low])
+
+            # Calculate CRC
+            crc = calculate_crc(modbus_frame)
+            crc_lsb = crc & 0xFF  # Least significant byte
+            crc_msb = (crc >> 8) & 0xFF  # Most significant byte
+
+            # Append CRC to the frame
+            modbus_frame += bytes([crc_lsb, crc_msb])
+
+            # Open the serial port and send the frame
+            with serial.Serial(self.serial_port, self.baudrate, parity=self.parity, stopbits=self.stopbits, bytesize=self.bytesize, timeout=1) as ser:
+                ser.write(modbus_frame)
+                print(f"Sent Modbus frame: {modbus_frame.hex()}")
+
+        except Exception as e:
+            print(f"Error sending Modbus data: {e}")
 
 # GUI Application
 class RelayApp(ctk.CTk):
@@ -243,28 +317,8 @@ class RelayApp(ctk.CTk):
         # Determine the register data based on the relay state
         register_data = 0x0001 if self.relay_states[index] else 0x0000
 
-        # Modbus frame components
-        slave_id = self.relay_device.slave_id
-        function_code = 0x06  # Function code for writing a single register
-        address_high = (relay_address >> 8) & 0xFF
-        address_low = relay_address & 0xFF
-        data_high = (register_data >> 8) & 0xFF
-        data_low = (register_data) & 0xFF
-
-        # Construct the Modbus frame
-        modbus_frame = bytes([slave_id, function_code, address_high, address_low, data_high, data_low])
-
-        # Calculate CRC using the custom calculate_crc function
-        crc = calculate_crc(modbus_frame)
-        crc_lsb = crc & 0xFF  # Least significant byte
-        crc_msb = (crc >> 8) & 0xFF  # Most significant byte
-
-        # Print the Modbus address, state, slave ID, function code, and CRC in hexadecimal
-        print(f"Relay {index + 1} at address {relay_address:#06x} set to {'ON' if self.relay_states[index] else 'OFF'}")
-        print(f"Slave ID: {slave_id:#04x}, Function Code: {function_code:#04x}")
-        print(f"Address: {relay_address:#06x}, Data: {register_data:#06x}")
-        print(f"CRC: {crc_msb:#04x} {crc_lsb:#04x}")  # Print CRC
-        print(f"CRC (swapped): {crc_lsb:#04x} {crc_msb:#04x}")  # Print swapped CRC
+        # Send Modbus data to communicate the relay state
+        self.relay_device.send_modbus_data(relay_address, register_data)
 
         # Update the relay button states in the GUI
         self.update_relay_buttons()
@@ -318,12 +372,19 @@ class CallbackDataBlock(ModbusSparseDataBlock):
         super().__init__(values)
         self.callback = callback
 
+    def getValues(self, address, count=1):
+        """Handle read requests."""
+        values = super().getValues(address, count)
+        print(f"Read request received for address {address:#06x}, count: {count}")
+        print(f"Returning values: {values}")
+        return values
+
     def setValues(self, address, values):
-        super().setValues(address, values)  # Pass the correct arguments to the parent method
-        self.callback(address, values)  # Trigger the callback
+        """Handle write requests."""
+        super().setValues(address, values)
+        self.callback(address, values)
 
 def relay_callback(address, value, app):
-    # relay_index = address - 0x0430  # Calculate the relay index based on the address
     relay_index = address - 0x0032  # Calculate the relay index based on the address
     if 0 <= relay_index < 16:  # Ensure the address is within the relay range
         state = bool(value[0])  # Get the relay state (ON/OFF)
@@ -335,6 +396,8 @@ def relay_callback(address, value, app):
         print(f"  Address: {address:#06x}")
         print(f"  Value: {value}")
         print(f"  Relay {relay_index + 1} set to {'ON' if state else 'OFF'} via Modbus master")
+    else:
+        print(f"Invalid write request received for address {address:#06x} with value {value}")
 
 def main():
     # Change the current working directory to so that opening relative paths/files will work
