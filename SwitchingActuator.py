@@ -59,7 +59,7 @@ class RelayDevice:
                 parity=self.parity,
                 stopbits=self.stopbits,
                 bytesize=self.bytesize,
-                framer=FramerRTU,  # Specify the correct framer for RTU
+                framer="rtu",  # Use the correct string key for RTU framer
                 handle_local_echo=False,  # Disable local echo
                 custom_functions=None,  # Default Modbus functions
                 on_data_received=self.log_serial_data  # Add a callback for logging raw data
