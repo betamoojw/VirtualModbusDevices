@@ -13,13 +13,13 @@ from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, Modbus
 import serial  # Import pyserial for sending Modbus data
 import traceback  # Import traceback for detailed error logging
 from pymodbus.framer.rtu import FramerRTU  # Import the RTU framer
+import json  # Import json for saving relay states
 
 
 # Configuration for Modbus
 class RelayDevice:
     def __init__(self, app, baudrate=9600, parity='N', stopbits=1, bytesize=8):
         self.slave_id = 1
-        # self.start_address = 0x0430  # Starting address in hexadecimal
         self.start_address = 0x0032  # Starting address in hexadecimal
         self.store = CallbackDataBlock(
             {self.start_address + i: 0 for i in range(16)},  # Initialize 16 relays
@@ -31,6 +31,9 @@ class RelayDevice:
         self.stopbits = stopbits
         self.bytesize = bytesize
         self.serial_port = "COM9"  # Default serial port
+
+        # Use the serial queue from the app
+        self.serial_queue = app.serial_queue
 
         self.start_rtu_server()
 
@@ -120,21 +123,26 @@ class RelayDevice:
             # Append CRC to the frame
             modbus_frame += bytes([crc_lsb, crc_msb])
 
-            # Open the serial port and send the frame
-            # with serial.Serial(self.serial_port, self.baudrate, parity=self.parity, stopbits=self.stopbits, bytesize=self.bytesize, timeout=1) as ser:
-            #     ser.write(modbus_frame)
-            #     print(f"Sent Modbus frame: {modbus_frame.hex()}")
-            print(f"Sent Modbus frame: {modbus_frame.hex()}")
+            # Put the Modbus frame into the serial queue
+            self.serial_queue.put(modbus_frame)
+            print(f"Enqueued Modbus frame: {modbus_frame.hex()}")
 
         except Exception as e:
-            print(f"Error sending Modbus data: {e}")
+            print(f"Error constructing Modbus data: {e}")
 
 # GUI Application
 class RelayApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Virtual Modbus Slave")
-        self.geometry("860x680")  # Adjusted window size for side-by-side layout
+        self.geometry("860x680")
+
+        # Initialize relay states
+        self.relay_states = [False] * 16  # Default to all relays OFF
+        self.relay_buttons = []
+
+        # Load relay states from file
+        self.load_relay_states()
 
         # Load configuration from config.ini
         self.config = configparser.ConfigParser()
@@ -262,6 +270,9 @@ class RelayApp(ctk.CTk):
         # Schedule serial data processing
         self.after(100, self.process_serial_data)
 
+        # Load relay states from file
+        self.load_relay_states()
+
     def get_serial_ports(self):
         """Retrieve a list of available serial ports."""
         ports = serial.tools.list_ports.comports()
@@ -282,7 +293,8 @@ class RelayApp(ctk.CTk):
         bytesize = self.bytesize_entry.get()
         bytesize = int(bytesize) if bytesize.isdigit() else 8  # Default to 8 if invalid
 
-        self.relay_device = RelayDevice(self, baudrate, parity, stopbits, bytesize)  # Pass self (app instance)
+        # Pass self (app instance) to RelayDevice
+        self.relay_device = RelayDevice(self, baudrate, parity, stopbits, bytesize)
         self.relay_device.slave_id = slave_id  # Set the selected slave ID
         self.relay_device.serial_port = serial_port  # Set the selected serial port
         self.feedback_label.configure(text="Server started with Slave ID: " + str(slave_id))
@@ -344,7 +356,7 @@ class RelayApp(ctk.CTk):
         relay_address = self.relay_device.start_address + index
 
         # Update the Modbus store with the new relay state
-        self.relay_device.store.setValues(relay_address, [1 if self.relay_states[index] else 0])  # Pass correct arguments
+        self.relay_device.store.setValues(relay_address, [1 if self.relay_states[index] else 0])
 
         # Determine the register data based on the relay state
         register_data = 0x0001 if self.relay_states[index] else 0x0000
@@ -354,6 +366,9 @@ class RelayApp(ctk.CTk):
 
         # Update the relay button states in the GUI
         self.update_relay_buttons()
+
+        # Save the updated relay states to the file
+        self.save_relay_states()
 
     def update_relay_buttons(self):
         for i, state in enumerate(self.relay_states):
@@ -450,6 +465,7 @@ class RelayApp(ctk.CTk):
                             self.relay_states[relay_index] = bool(value)
                             print(f"Relay {relay_index + 1} set to {'ON' if value else 'OFF'}")
                             self.update_relay_buttons()
+                            self.save_relay_states()
                         else:
                             print(f"Invalid relay address: {address:#06x}")
 
@@ -468,6 +484,27 @@ class RelayApp(ctk.CTk):
 
         # Schedule the next check
         self.after(100, self.process_serial_data)
+
+    def save_relay_states(self):
+        """Save the current relay states to a file."""
+        try:
+            with open("relay_states.json", "w") as file:
+                json.dump(self.relay_states, file)
+            print("Relay states saved successfully.")
+        except Exception as e:
+            print(f"Error saving relay states: {e}")
+
+    def load_relay_states(self):
+        """Load relay states from a file and update the GUI."""
+        try:
+            with open("relay_states.json", "r") as file:
+                self.relay_states = json.load(file)
+            print("Relay states loaded successfully.")
+            self.update_relay_buttons()  # Update the GUI with the loaded states
+        except FileNotFoundError:
+            print("Relay states file not found. Using default states.")
+        except Exception as e:
+            print(f"Error loading relay states: {e}")
 
 def calculate_crc(data):
     """Calculate the Modbus CRC16 checksum."""
