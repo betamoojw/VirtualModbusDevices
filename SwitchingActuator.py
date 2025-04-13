@@ -496,7 +496,7 @@ class RelayApp(ctk.CTk):
             print(f"Error saving relay states: {e}")
 
     def load_switching_actuator_data(self):
-        """Load and parse the SwitchingActuatorData.json file."""
+        """Load relay states from SwitchingActuatorData.json and update the GUI."""
         try:
             with open("SwitchingActuatorData.json", "r") as file:
                 data = json.load(file)
@@ -507,16 +507,16 @@ class RelayApp(ctk.CTk):
                 self.relay_quantity = data.get("quantity", 0)
                 self.relay_data = data.get("data", [])
 
-                # Initialize relay states based on the quantity
-                self.relay_states = [relay.get("value", 0) for relay in self.relay_data]
+                # Initialize relay states based on the data
+                self.relay_states = [relay.get("value", False) for relay in self.relay_data]
 
-                # Update the GUI with the loaded data
+                # Update the GUI with the loaded states
                 self.update_relay_buttons()
         except FileNotFoundError:
             print("SwitchingActuatorData.json file not found. Using default values.")
             self.relay_type = "switchingActuator"
             self.relay_quantity = 16
-            self.relay_states = [0] * self.relay_quantity
+            self.relay_states = [False] * self.relay_quantity
         except Exception as e:
             print(f"Error loading SwitchingActuatorData.json: {e}")
 
