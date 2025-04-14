@@ -27,59 +27,59 @@
         },
         {
             "name": "Relay#3",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#4",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#5",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#6",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#7",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#8",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#9",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#10",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#11",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#12",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#13",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#14",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#15",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#16",
-            "value": true
+            "value": false
         }
     ]
 }

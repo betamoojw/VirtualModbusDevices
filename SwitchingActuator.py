@@ -506,16 +506,22 @@ class RelayApp(ctk.CTk):
         self.after(100, self.process_serial_data)
 
     def save_relay_states(self):
-        """Save the current relay states to the SwitchingActuatorData.json file."""
+        """Save the current relay states to the data section of SwitchingActuatorData.json."""
         try:
-            data = {
-                "protocol": self.relay_type,
-                "quantity": self.relay_quantity,
-                "data": [{"name": f"Relay#{i+1}", "value": state} for i, state in enumerate(self.relay_states)]
-            }
+            # Load the existing JSON file
+            with open("SwitchingActuatorData.json", "r") as file:
+                data = json.load(file)
+
+            # Update only the data section with the current relay states
+            data["data"] = [{"name": f"Relay#{i+1}", "value": state} for i, state in enumerate(self.relay_states)]
+
+            # Save the updated JSON back to the file
             with open("SwitchingActuatorData.json", "w") as file:
                 json.dump(data, file, indent=4)
-            print("Relay states saved successfully.")
+
+            print("Relay states updated successfully in SwitchingActuatorData.json.")
+        except FileNotFoundError:
+            print("SwitchingActuatorData.json file not found. Cannot save relay states.")
         except Exception as e:
             print(f"Error saving relay states: {e}")
 
