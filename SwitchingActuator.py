@@ -513,7 +513,17 @@ class RelayApp(ctk.CTk):
                 data = json.load(file)
 
             # Update only the data section with the current relay states
-            data["data"] = [{"name": f"Relay#{i+1}", "value": state} for i, state in enumerate(self.relay_states)]
+            base_address = 50  # Starting address for relays
+            data["data"] = [
+                {
+                    "name": f"Relay#{i+1}",
+                    "address": base_address + i,
+                    "data_type": "UINT16",
+                    "access": "Read/Write",
+                    "value": state
+                }
+                for i, state in enumerate(self.relay_states)
+            ]
 
             # Save the updated JSON back to the file
             with open("SwitchingActuatorData.json", "w") as file:

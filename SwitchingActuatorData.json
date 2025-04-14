@@ -19,66 +19,114 @@
     "data": [
         {
             "name": "Relay#1",
+            "address": 50,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": true
         },
         {
             "name": "Relay#2",
+            "address": 51,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": true
         },
         {
             "name": "Relay#3",
+            "address": 52,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#4",
+            "address": 53,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#5",
+            "address": 54,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#6",
+            "address": 55,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#7",
+            "address": 56,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#8",
+            "address": 57,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#9",
+            "address": 58,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#10",
+            "address": 59,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#11",
+            "address": 60,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#12",
+            "address": 61,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#13",
+            "address": 62,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#14",
+            "address": 63,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#15",
+            "address": 64,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         },
         {
             "name": "Relay#16",
+            "address": 65,
+            "data_type": "UINT16",
+            "access": "Read/Write",
             "value": false
         }
     ]
