@@ -78,14 +78,6 @@ class RelayDevice:
             address = (data[2] << 8) | data[3]
             value = (data[4] << 8) | data[5]
             crc_received = (data[-2] | (data[-1] << 8))
-
-            # Log parsed data
-            print(f"Parsed Modbus Frame:")
-            print(f"  Slave ID: {slave_id}")
-            print(f"  Function Code: {function_code}")
-            print(f"  Address: {address:#06x}")
-            print(f"  Value: {value:#06x}")
-            print(f"  CRC Received: {crc_received:#06x}")
         else:
             print("Invalid Modbus frame received.")
 
@@ -291,9 +283,7 @@ class RelayApp(ctk.CTk):
         """Retrieve a list of available serial ports."""
         ports = serial.tools.list_ports.comports()
         port_list = [port.device for port in ports] or ["COM9"]  # Default to COM9 if no ports found
-        print(f"Available ports: {', '.join(port_list)}")  # Print ports in one line
-        
-        return [port.device for port in ports] or ["COM9"]  # Default to COM9 if no ports found
+        return port_list
 
     def start_server(self):
         """Start the Modbus RTU server and load relay states from the JSON file."""
@@ -473,9 +463,6 @@ class RelayApp(ctk.CTk):
 
             # Process the data (e.g., parse Modbus frame and update GUI)
             try:
-                print(f"Processing data: {data.hex()}")
-
-                # Parse the Modbus frame
                 if len(data) >= 8:  # Minimum Modbus RTU frame length
                     slave_id = data[0]
                     function_code = data[1]
@@ -494,7 +481,6 @@ class RelayApp(ctk.CTk):
                         relay_index = address - 0x0032  # Calculate relay index
                         if 0 <= relay_index < len(self.relay_states):
                             self.relay_states[relay_index] = bool(value)
-                            print(f"Relay {relay_index + 1} set to {'ON' if value else 'OFF'}")
                             self.update_relay_buttons()
                             self.save_relay_states()
                         else:
@@ -502,11 +488,9 @@ class RelayApp(ctk.CTk):
 
                     elif function_code == 0x03:  # Read Holding Registers
                         num_registers = (data[4] << 8) | data[5]  # Number of registers to read
-                        print(f"Read request received for address {address:#06x}, num_registers: {num_registers}")
                         values = self.relay_device.store.getValues(address, num_registers)
-                        response = self.relay_device.construct_read_response(slave_id, function_code, values)  # Fix here
+                        response = self.relay_device.construct_read_response(slave_id, function_code, values)
                         self.serial_queue.put(response)
-                        print(f"Responded with values: {values}")
                         print(f"Responded: {response}")
 
                     else:
@@ -544,8 +528,6 @@ class RelayApp(ctk.CTk):
             # Save the updated JSON back to the file
             with open("SwitchingActuatorData.json", "w") as file:
                 json.dump(data, file, indent=4)
-
-            print("Relay states updated successfully in SwitchingActuatorData.json.")
         except FileNotFoundError:
             print("SwitchingActuatorData.json file not found. Cannot save relay states.")
         except Exception as e:
@@ -575,14 +557,20 @@ class RelayApp(ctk.CTk):
     def load_switching_actuator_data(self):
         """Load relay states and communication settings from SwitchingActuatorData.json."""
         try:
+            # Load the JSON file
             with open("SwitchingActuatorData.json", "r") as file:
                 data = json.load(file)
                 print("Switching Actuator Data loaded successfully.")
+
+                # Set the application title from the device_name
+                device_name = data.get("device_name", "Relay Application")
+                self.title(device_name)
 
                 # Parse the data
                 self.relay_type = data.get("protocol", "unknown")
                 self.relay_quantity = data.get("quantity", 0)
                 self.relay_data = data.get("data", [])
+                self.relay_states = [relay.get("value", False) for relay in self.relay_data]
                 self.communication_config = data.get("communication", {})
 
                 # Initialize relay states based on the data
@@ -596,7 +584,7 @@ class RelayApp(ctk.CTk):
                 self.stop_bits = self.communication_config.get("stop_bits", 1)
                 self.slave_id = self.communication_config.get("slave_id", 1)
 
-                # Update the GUI with the loaded states
+                # Update the GUI with the loaded relay states
                 self.update_relay_buttons()
         except FileNotFoundError:
             print("SwitchingActuatorData.json file not found. Using default values.")
@@ -629,10 +617,10 @@ class CallbackDataBlock(ModbusSparseDataBlock):
         super().__init__(values)
         self.callback = callback
 
-    def getValues(self, address, count=1):
+    def getValues(self, address, num_registers=1):
         """Handle read requests."""
-        values = super().getValues(address, count)
-        print(f"Read request received for address {address:#06x}, count: {count}")
+        values = super().getValues(address, num_registers)
+        print(f"Read request received for address {address:#06x}, num_registers: {num_registers}")
         print(f"Returning values: {values}")
         return values
 
@@ -647,7 +635,7 @@ def relay_callback(address, value, app):
         state = bool(value[0])  # Get the relay state (ON/OFF)
         app.relay_states[relay_index] = state
         app.update_relay_buttons()
-        print(f"Relay {relay_index + 1} set to {'ON' if state else 'OFF'} via Modbus master")
+        print(f"Relay {relay_index + 1} set to {'ON' if state else 'OFF'}")
     else:
         print(f"Invalid write request received for address {address:#06x} with value {value}")
 
