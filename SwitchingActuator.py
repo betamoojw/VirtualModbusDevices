@@ -6,7 +6,6 @@ import threading
 import queue
 import customtkinter as ctk
 import serial.tools.list_ports  # Import to list available serial ports
-import configparser  # Import configparser to handle config.ini
 from pymodbus.server import StartSerialServer
 from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext, ModbusServerContext  # Add this import
@@ -130,6 +129,29 @@ class RelayDevice:
         except Exception as e:
             print(f"Error constructing Modbus data: {e}")
 
+    def construct_read_response(self, slave_id, function_code, values):
+        """Construct a Modbus response for Read Holding Registers."""
+        try:
+            byte_count = len(values) * 2  # Each register is 2 bytes
+            response = bytes([slave_id, function_code, byte_count])
+
+            # Add the register values to the response
+            for value in values:
+                response += bytes([(value >> 8) & 0xFF, value & 0xFF])
+
+            # Calculate CRC
+            crc = calculate_crc(response)
+            crc_lsb = crc & 0xFF  # Least significant byte
+            crc_msb = (crc >> 8) & 0xFF  # Most significant byte
+
+            # Append CRC to the response
+            response += bytes([crc_lsb, crc_msb])
+
+            return response
+        except Exception as e:
+            print(f"Error constructing read response: {e}")
+            return b""
+
 # GUI Application
 class RelayApp(ctk.CTk):
     def __init__(self):
@@ -140,11 +162,6 @@ class RelayApp(ctk.CTk):
         # Initialize relay states
         self.relay_states = [False] * 16  # Default to all relays OFF
         self.relay_buttons = []
-
-        # Load configuration from config.ini
-        self.config = configparser.ConfigParser()
-        self.config.read("config.ini")
-        self.serial_config = self.config["SerialConfig"]
 
         # Load Switching Actuator Data
         self.load_switching_actuator_data()
@@ -168,7 +185,7 @@ class RelayApp(ctk.CTk):
         self.slave_id_entry = ctk.CTkEntry(
             self.config_frame, placeholder_text="Enter Slave ID (e.g., 1)"
         )
-        self.slave_id_entry.insert(0, self.serial_config.get("slave_id", "1"))
+        self.slave_id_entry.insert(0, str(self.slave_id))
         self.slave_id_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Serial Port:").pack(pady=2)
@@ -176,35 +193,35 @@ class RelayApp(ctk.CTk):
         self.serial_port_menu = ctk.CTkOptionMenu(
             self.config_frame, values=self.serial_ports
         )
-        self.serial_port_menu.set(self.serial_config.get("serial_port", "COM9"))
+        self.serial_port_menu.set(self.serial_port)
         self.serial_port_menu.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Baud Rate:").pack(pady=2)
         self.baudrate_entry = ctk.CTkEntry(
             self.config_frame, placeholder_text="Enter Baud Rate (e.g., 9600)"
         )
-        self.baudrate_entry.insert(0, self.serial_config.get("baudrate", "9600"))
+        self.baudrate_entry.insert(0, str(self.baudrate))
         self.baudrate_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Parity:").pack(pady=2)
         self.parity_entry = ctk.CTkEntry(
             self.config_frame, placeholder_text="Enter Parity (e.g., N)"
         )
-        self.parity_entry.insert(0, self.serial_config.get("parity", "N"))
+        self.parity_entry.insert(0, self.parity)
         self.parity_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Stop Bits:").pack(pady=2)
         self.stopbits_entry = ctk.CTkEntry(
             self.config_frame, placeholder_text="Enter Stop Bits (e.g., 1)"
         )
-        self.stopbits_entry.insert(0, self.serial_config.get("stopbits", "1"))
+        self.stopbits_entry.insert(0, str(self.stop_bits))
         self.stopbits_entry.pack(pady=5)
 
         ctk.CTkLabel(self.config_frame, text="Byte Size:").pack(pady=2)
         self.bytesize_entry = ctk.CTkEntry(
             self.config_frame, placeholder_text="Enter Byte Size (e.g., 8)"
         )
-        self.bytesize_entry.insert(0, self.serial_config.get("bytesize", "8"))
+        self.bytesize_entry.insert(0, str(self.data_bits))
         self.bytesize_entry.pack(pady=5)
 
         self.start_button = ctk.CTkButton(
@@ -297,7 +314,7 @@ class RelayApp(ctk.CTk):
         self.feedback_label.configure(text="Server started with Slave ID: " + str(slave_id))
 
     def update_serial_config(self):
-        """Update the serial configuration and save to config.ini."""
+        """Update the serial configuration and save to SwitchingActuatorData.json."""
         if self.relay_device:
             try:
                 serial_port = self.serial_port_menu.get()
@@ -316,17 +333,16 @@ class RelayApp(ctk.CTk):
                 self.relay_device.configure_serial(baudrate, parity, stopbits, bytesize)
                 self.relay_device.serial_port = serial_port
 
-                # Save the updated configuration to config.ini
-                self.config["SerialConfig"] = {
-                    "slave_id": str(slave_id),
-                    "baudrate": str(baudrate),
-                    "parity": parity,
-                    "stopbits": str(stopbits),
-                    "bytesize": str(bytesize),
+                # Save the updated configuration to SwitchingActuatorData.json
+                self.communication_config.update({
                     "serial_port": serial_port,
-                }
-                with open("config.ini", "w") as configfile:
-                    self.config.write(configfile)
+                    "slave_id": slave_id,
+                    "baud_rate": baudrate,
+                    "parity": parity,
+                    "stop_bits": stopbits,
+                    "data_bits": bytesize
+                })
+                self.save_switching_actuator_data()
 
                 self.feedback_label.configure(
                     text="Serial configuration updated successfully with Slave ID: " + str(slave_id)
@@ -445,7 +461,10 @@ class RelayApp(ctk.CTk):
                     slave_id = data[0]
                     function_code = data[1]
                     address = (data[2] << 8) | data[3]
-                    value = (data[4] << 8) | data[5]
+                    if function_code == 0x06:
+                        value = (data[4] << 8) | data[5]
+                    else:
+                        num_registers = (data[4] << 8) | data[5]  # Number of registers to read
                     crc_received = (data[-2] | (data[-1] << 8))
 
                     # Validate CRC
@@ -466,8 +485,13 @@ class RelayApp(ctk.CTk):
                             print(f"Invalid relay address: {address:#06x}")
 
                     elif function_code == 0x03:  # Read Holding Registers
-                        print(f"Read request received for address {address:#06x}, value: {value}")
-                        # Handle read requests if needed (e.g., respond with register values)
+                        address = address - 0x0032  # Calculate relay index
+                        print(f"Read request received for address {address:#06x}, num_registers: {num_registers}")
+                        values = self.relay_device.store.getValues(address, num_registers)
+                        response = self.relay_device.construct_read_response(slave_id, function_code, values)  # Fix here
+                        self.serial_queue.put(response)
+                        print(f"Responded with values: {values}")
+                        print(f"Responded: {response}")
 
                     else:
                         print(f"Unsupported function code: {function_code}")
@@ -485,7 +509,7 @@ class RelayApp(ctk.CTk):
         """Save the current relay states to the SwitchingActuatorData.json file."""
         try:
             data = {
-                "type": self.relay_type,
+                "protocol": self.relay_type,
                 "quantity": self.relay_quantity,
                 "data": [{"name": f"Relay#{i+1}", "value": state} for i, state in enumerate(self.relay_states)]
             }
@@ -495,20 +519,50 @@ class RelayApp(ctk.CTk):
         except Exception as e:
             print(f"Error saving relay states: {e}")
 
+    def save_switching_actuator_data(self):
+        """Save the updated SwitchingActuatorData.json file."""
+        try:
+            data = {
+                "device_name": "Modbus RTU 16-Channel Relay",
+                "device_id": "MR16-001",
+                "description": "Modbus RTU relay module with 16 channels for controlling various electrical devices.",
+                "manufacturer": "Example Manufacturer",
+                "model": "MR16",
+                "version": "1.0",
+                "protocol": "Modbus RTU",
+                "communication": self.communication_config,
+                "quantity": self.relay_quantity,
+                "data": [{"name": f"Relay#{i+1}", "value": state} for i, state in enumerate(self.relay_states)]
+            }
+            with open("SwitchingActuatorData.json", "w") as file:
+                json.dump(data, file, indent=4)
+            print("SwitchingActuatorData.json updated successfully.")
+        except Exception as e:
+            print(f"Error saving SwitchingActuatorData.json: {e}")
+
     def load_switching_actuator_data(self):
-        """Load relay states from SwitchingActuatorData.json and update the GUI."""
+        """Load relay states and communication settings from SwitchingActuatorData.json."""
         try:
             with open("SwitchingActuatorData.json", "r") as file:
                 data = json.load(file)
                 print("Switching Actuator Data loaded successfully.")
 
                 # Parse the data
-                self.relay_type = data.get("type", "unknown")
+                self.relay_type = data.get("protocol", "unknown")
                 self.relay_quantity = data.get("quantity", 0)
                 self.relay_data = data.get("data", [])
+                self.communication_config = data.get("communication", {})
 
                 # Initialize relay states based on the data
                 self.relay_states = [relay.get("value", False) for relay in self.relay_data]
+
+                # Initialize serial configuration
+                self.serial_port = self.communication_config.get("serial_port", "COM9")
+                self.baudrate = self.communication_config.get("baud_rate", 9600)
+                self.data_bits = self.communication_config.get("data_bits", 8)
+                self.parity = self.communication_config.get("parity", "N")
+                self.stop_bits = self.communication_config.get("stop_bits", 1)
+                self.slave_id = self.communication_config.get("slave_id", 1)
 
                 # Update the GUI with the loaded states
                 self.update_relay_buttons()
@@ -517,6 +571,12 @@ class RelayApp(ctk.CTk):
             self.relay_type = "switchingActuator"
             self.relay_quantity = 16
             self.relay_states = [False] * self.relay_quantity
+            self.serial_port = "COM9"
+            self.baudrate = 9600
+            self.data_bits = 8
+            self.parity = "N"
+            self.stop_bits = 1
+            self.slave_id = 1
         except Exception as e:
             print(f"Error loading SwitchingActuatorData.json: {e}")
 

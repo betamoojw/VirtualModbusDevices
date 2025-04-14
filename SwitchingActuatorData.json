@@ -1,5 +1,20 @@
 {
-    "type": "switchingActuator",
+    "device_name": "Modbus RTU 16-Channel Relay",
+    "device_id": "MR16-001",
+    "description": "Modbus RTU relay module with 16 channels for controlling various electrical devices.",
+    "manufacturer": "Example Manufacturer",
+    "model": "MR16",
+    "version": "1.0",
+    "protocol": "Modbus RTU",
+    "communication": {
+        "interface": "RS485",
+        "serial_port": "COM9",
+        "baud_rate": 9600,
+        "data_bits": 8,
+        "parity": "N",
+        "stop_bits": 1,
+        "slave_id": 1
+    },
     "quantity": 16,
     "data": [
         {
@@ -8,7 +23,7 @@
         },
         {
             "name": "Relay#2",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#3",
@@ -16,55 +31,55 @@
         },
         {
             "name": "Relay#4",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#5",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#6",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#7",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#8",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#9",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#10",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#11",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#12",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#13",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#14",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#15",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#16",
-            "value": false
+            "value": true
         }
     ]
 }
