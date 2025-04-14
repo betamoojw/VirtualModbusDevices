@@ -296,22 +296,41 @@ class RelayApp(ctk.CTk):
         return [port.device for port in ports] or ["COM9"]  # Default to COM9 if no ports found
 
     def start_server(self):
-        serial_port = self.serial_port_menu.get()
-        slave_id = self.slave_id_entry.get()
-        slave_id = int(slave_id) if slave_id.isdigit() else 1  # Default to 1 if invalid
-        baudrate = self.baudrate_entry.get()
-        baudrate = int(baudrate) if baudrate.isdigit() else 9600  # Use default 9600 if invalid
-        parity = self.parity_entry.get()
-        stopbits = self.stopbits_entry.get()
-        stopbits = int(stopbits) if stopbits.isdigit() else 1  # Default to 1 if invalid
-        bytesize = self.bytesize_entry.get()
-        bytesize = int(bytesize) if bytesize.isdigit() else 8  # Default to 8 if invalid
+        """Start the Modbus RTU server and load relay states from the JSON file."""
+        try:
+            # Load the relay states from the JSON file
+            with open("SwitchingActuatorData.json", "r") as file:
+                data = json.load(file)
+                self.relay_data = data.get("data", [])
+                self.relay_states = [relay.get("value", False) for relay in self.relay_data]
 
-        # Pass self (app instance) to RelayDevice
-        self.relay_device = RelayDevice(self, baudrate, parity, stopbits, bytesize)
-        self.relay_device.slave_id = slave_id  # Set the selected slave ID
-        self.relay_device.serial_port = serial_port  # Set the selected serial port
-        self.feedback_label.configure(text="Server started with Slave ID: " + str(slave_id))
+            # Update the GUI with the loaded relay states
+            self.update_relay_buttons()
+
+            # Retrieve serial configuration from the GUI
+            serial_port = self.serial_port_menu.get()
+            slave_id = self.slave_id_entry.get()
+            slave_id = int(slave_id) if slave_id.isdigit() else 1  # Default to 1 if invalid
+            baudrate = self.baudrate_entry.get()
+            baudrate = int(baudrate) if baudrate.isdigit() else 9600  # Use default 9600 if invalid
+            parity = self.parity_entry.get()
+            stopbits = self.stopbits_entry.get()
+            stopbits = int(stopbits) if stopbits.isdigit() else 1  # Default to 1 if invalid
+            bytesize = self.bytesize_entry.get()
+            bytesize = int(bytesize) if bytesize.isdigit() else 8  # Default to 8 if invalid
+
+            # Pass self (app instance) to RelayDevice
+            self.relay_device = RelayDevice(self, baudrate, parity, stopbits, bytesize)
+            self.relay_device.slave_id = slave_id  # Set the selected slave ID
+            self.relay_device.serial_port = serial_port  # Set the selected serial port
+            self.feedback_label.configure(text="Server started with Slave ID: " + str(slave_id))
+
+        except FileNotFoundError:
+            print("SwitchingActuatorData.json file not found. Using default relay states.")
+            self.relay_states = [False] * 16  # Default to all relays OFF
+            self.update_relay_buttons()
+        except Exception as e:
+            print(f"Error starting server: {e}")
 
     def update_serial_config(self):
         """Update the serial configuration and save to SwitchingActuatorData.json."""
@@ -461,10 +480,6 @@ class RelayApp(ctk.CTk):
                     slave_id = data[0]
                     function_code = data[1]
                     address = (data[2] << 8) | data[3]
-                    if function_code == 0x06:
-                        value = (data[4] << 8) | data[5]
-                    else:
-                        num_registers = (data[4] << 8) | data[5]  # Number of registers to read
                     crc_received = (data[-2] | (data[-1] << 8))
 
                     # Validate CRC
@@ -475,6 +490,7 @@ class RelayApp(ctk.CTk):
 
                     # Handle Modbus logic based on function code
                     if function_code == 0x06:  # Write Single Register
+                        value = (data[4] << 8) | data[5]
                         relay_index = address - 0x0032  # Calculate relay index
                         if 0 <= relay_index < len(self.relay_states):
                             self.relay_states[relay_index] = bool(value)
@@ -485,7 +501,7 @@ class RelayApp(ctk.CTk):
                             print(f"Invalid relay address: {address:#06x}")
 
                     elif function_code == 0x03:  # Read Holding Registers
-                        address = address - 0x0032  # Calculate relay index
+                        num_registers = (data[4] << 8) | data[5]  # Number of registers to read
                         print(f"Read request received for address {address:#06x}, num_registers: {num_registers}")
                         values = self.relay_device.store.getValues(address, num_registers)
                         response = self.relay_device.construct_read_response(slave_id, function_code, values)  # Fix here

@@ -13,7 +13,7 @@
         "data_bits": 8,
         "parity": "N",
         "stop_bits": 1,
-        "slave_id": 1
+        "slave_id": 4
     },
     "quantity": 16,
     "data": [
@@ -22,7 +22,7 @@
             "address": 50,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#2",
@@ -43,7 +43,7 @@
             "address": 53,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#5",
@@ -57,77 +57,77 @@
             "address": 55,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#7",
             "address": 56,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#8",
             "address": 57,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#9",
             "address": 58,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#10",
             "address": 59,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#11",
             "address": 60,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#12",
             "address": 61,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#13",
             "address": 62,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#14",
             "address": 63,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#15",
             "address": 64,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#16",
             "address": 65,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         }
     ]
 }
