@@ -13,6 +13,8 @@ import serial  # Import pyserial for sending Modbus data
 import traceback  # Import traceback for detailed error logging
 from pymodbus.framer.rtu import FramerRTU  # Import the RTU framer
 import json  # Import json for saving relay states
+from PIL import Image
+from customtkinter import CTkImage
 
 
 # Configuration for Modbus
@@ -151,6 +153,15 @@ class RelayApp(ctk.CTk):
         self.title("Virtual Modbus Slave")
         self.geometry("860x680")
 
+        # # Check if the image files exist
+        # if not os.path.exists("images/manual-enable.png") or not os.path.exists("images/manual-disable.png"):
+        #     print("Error: Image files 'manual-enable.png' or 'manual-disable.png' not found.")
+        #     exit(1)
+
+        # # Load images for the checkbox
+        # self.manual_enable_image = CTkImage(Image.open("images/manual-enable.png"), size=(20, 20))
+        # self.manual_disable_image = CTkImage(Image.open("images/manual-disable.png"), size=(20, 20))
+
         # Initialize relay states
         self.relay_states = [False] * 16  # Default to all relays OFF
         self.relay_buttons = []
@@ -255,16 +266,15 @@ class RelayApp(ctk.CTk):
         for c in range(2):  # 2 columns
             self.relay_frame.grid_columnconfigure(c, weight=1)
 
-        self.switch_button = ctk.CTkButton(
-            self.relay_frame,
+        self.manual_switch_checkbox = ctk.CTkCheckBox(
+            self,
             text="Manual Switch",
-            command=self.manual_switch_press,
-            border_width=2  # Set the border width to make it more bold
+            command=self.toggle_manual_switch,
+            onvalue="ON",
+            offvalue="OFF",
+            # image=self.manual_disable_image  # Default to unchecked image
         )
-        self.switch_button.grid(row=9, column=0, columnspan=2, pady=10)
-
-        self.led_indicator = ctk.CTkLabel(self.relay_frame, text="LED OFF", text_color="red")
-        self.led_indicator.grid(row=10, column=0, columnspan=2, pady=10)
+        self.manual_switch_checkbox.grid(row=9, column=0, columnspan=2, pady=10)
 
         # Long press variables
         self.press_start_time = None
@@ -403,33 +413,28 @@ class RelayApp(ctk.CTk):
                     font=("Arial", 12, "bold")  # Set font to bold
                 )
 
-    def manual_switch_press(self):
-        if self.press_start_time is None:  # if not pressed
-            self.press_start_time = time.time()
-            self.switch_button.configure(text="Release to Switch")
-            self.after(100, self.check_switch_duration)
-        else:  # if already pressed
-            duration = time.time() - self.press_start_time
-            if (duration >= 5):  # If long pressed for more than 5 seconds
-                self.enable_relay_timing()
-                self.toggle_led_indicator(True)
-            self.press_start_time = None
-            self.switch_button.configure(text="Manual Switch")
-
-    def check_switch_duration(self):
-        if self.press_start_time is not None:
-            self.after(100, self.check_switch_duration)
+    def toggle_manual_switch(self):
+        """Toggle the manual switch and update the checkbox image."""
+        if self.manual_switch_checkbox.get() == "ON":
+            # self.manual_switch_checkbox.configure(image=self.manual_enable_image)
+            self.manual_switch_checkbox.configure(text="Manual Switch (ON)")
+        else:
+            # self.manual_switch_checkbox.configure(image=self.manual_disable_image)
+            self.manual_switch_checkbox.configure(text="Manual Switch (OFF)")
 
     def enable_relay_timing(self):
         self.toggle_led_indicator(True)
-        time.sleep(600)  # Wait for 10 minutes
+        time.sleep(120)  # Wait for 2 minutes
         self.toggle_led_indicator(False)
 
     def toggle_led_indicator(self, status):
+        """Update the LED indicator based on the status."""
         if status:
-            self.led_indicator.configure(text="LED ON", text_color="green")
+            self.manual_switch_checkbox.select()  # Set the checkbox to ON
+            self.manual_switch_checkbox.configure(text="Manual Control (ON)")
         else:
-            self.led_indicator.configure(text="LED OFF", text_color="red")
+            self.manual_switch_checkbox.deselect()  # Set the checkbox to OFF
+            self.manual_switch_checkbox.configure(text="Manual Control (OFF)")
 
     def handle_serial_communication(self):
         """Handle serial communication in a separate thread."""

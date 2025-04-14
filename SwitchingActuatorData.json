@@ -29,14 +29,14 @@
             "address": 51,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#3",
             "address": 52,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#4",
@@ -50,7 +50,7 @@
             "address": 54,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": false
+            "value": true
         },
         {
             "name": "Relay#6",
@@ -64,7 +64,7 @@
             "address": 56,
             "data_type": "UINT16",
             "access": "Read/Write",
-            "value": true
+            "value": false
         },
         {
             "name": "Relay#8",
