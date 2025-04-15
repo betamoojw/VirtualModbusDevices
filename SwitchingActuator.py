@@ -15,6 +15,7 @@ from pymodbus.framer.rtu import FramerRTU  # Import the RTU framer
 import json  # Import json for saving relay states
 from PIL import Image
 from customtkinter import CTkImage
+import tkinter.messagebox as messagebox  # Import the messagebox module
 
 
 # Configuration for Modbus
@@ -266,15 +267,18 @@ class RelayApp(ctk.CTk):
         for c in range(2):  # 2 columns
             self.relay_frame.grid_columnconfigure(c, weight=1)
 
-        self.manual_switch_checkbox = ctk.CTkCheckBox(
+        self.manual_switch = ctk.CTkSwitch(
             self,
-            text="Manual Switch",
+            text="Protocol Ctrl",
             command=self.toggle_manual_switch,
             onvalue="ON",
             offvalue="OFF",
-            # image=self.manual_disable_image  # Default to unchecked image
+            width=120,  # Double the default width (default is 60)
+            height=50   # Double the default height (default is 25)
         )
-        self.manual_switch_checkbox.grid(row=9, column=0, columnspan=2, pady=10)
+        self.manual_switch.grid(row=9, column=0, columnspan=2, pady=10)
+
+        self.manual_switch.select(True)  # Set the manual switch to OFF
 
         # Long press variables
         self.press_start_time = None
@@ -372,12 +376,21 @@ class RelayApp(ctk.CTk):
                 )
 
     def toggle_relay(self, index):
+        """Toggle the relay state or show an alert if manual switch is ON."""
         # Check if the relay device is initialized
         if not hasattr(self, "relay_device") or self.relay_device is None:
             print("Error: Relay device is not initialized. Please start the server first.")
             self.feedback_label.configure(
                 text="Error: Relay device is not initialized. Start the server first.",
                 text_color="red",
+            )
+            return
+
+        # Check if the manual switch is ON
+        if self.manual_switch.get() == "ON":
+            messagebox.showerror(
+                title="Action Not Allowed",
+                message="Relay buttons are disabled when Protocol Ctrl is ON."
             )
             return
 
@@ -414,27 +427,28 @@ class RelayApp(ctk.CTk):
                 )
 
     def toggle_manual_switch(self):
-        """Toggle the manual switch and update the checkbox image."""
-        if self.manual_switch_checkbox.get() == "ON":
-            # self.manual_switch_checkbox.configure(image=self.manual_enable_image)
-            self.manual_switch_checkbox.configure(text="Manual Switch (ON)")
+        """Toggle the manual switch and update the switch text and relay button states."""
+        if self.manual_switch.get() == "ON":
+            self.manual_switch.configure(text="Protocol Ctrl")
+            # Disable all relay buttons
+            for button in self.relay_buttons:
+                button.configure(state="disabled")
+            self.toggle_led_indicator(True)  # Called here
         else:
-            # self.manual_switch_checkbox.configure(image=self.manual_disable_image)
-            self.manual_switch_checkbox.configure(text="Manual Switch (OFF)")
-
-    def enable_relay_timing(self):
-        self.toggle_led_indicator(True)
-        time.sleep(120)  # Wait for 2 minutes
-        self.toggle_led_indicator(False)
+            self.manual_switch.configure(text="Manual Ctrl")
+            # Enable all relay buttons
+            for button in self.relay_buttons:
+                button.configure(state="normal")
+            self.toggle_led_indicator(False)  # Called here
 
     def toggle_led_indicator(self, status):
         """Update the LED indicator based on the status."""
         if status:
-            self.manual_switch_checkbox.select()  # Set the checkbox to ON
-            self.manual_switch_checkbox.configure(text="Manual Control (ON)")
+            self.manual_switch.select()  # Set the switch to ON
+            self.manual_switch.configure(text="Protocol Ctrl")
         else:
-            self.manual_switch_checkbox.deselect()  # Set the checkbox to OFF
-            self.manual_switch_checkbox.configure(text="Manual Control (OFF)")
+            self.manual_switch.deselect()  # Set the switch to OFF
+            self.manual_switch.configure(text="Manual Ctrl")
 
     def handle_serial_communication(self):
         """Handle serial communication in a separate thread."""
