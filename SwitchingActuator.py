@@ -154,14 +154,14 @@ class RelayApp(ctk.CTk):
         self.title("Virtual Modbus Slave")
         self.geometry("860x680")
 
-        # # Check if the image files exist
-        # if not os.path.exists("images/manual-enable.png") or not os.path.exists("images/manual-disable.png"):
-        #     print("Error: Image files 'manual-enable.png' or 'manual-disable.png' not found.")
-        #     exit(1)
+        # Check if the image files exist
+        if not os.path.exists("images/manual-enable.png") or not os.path.exists("images/manual-disable.png"):
+            print("Error: Image files 'manual-enable.png' or 'manual-disable.png' not found.")
+            exit(1)
 
-        # # Load images for the checkbox
-        # self.manual_enable_image = CTkImage(Image.open("images/manual-enable.png"), size=(20, 20))
-        # self.manual_disable_image = CTkImage(Image.open("images/manual-disable.png"), size=(20, 20))
+        # Load images for the checkbox
+        self.manual_enable_image = CTkImage(Image.open("images/manual-enable.png"), size=(20, 20))
+        self.manual_disable_image = CTkImage(Image.open("images/manual-disable.png"), size=(20, 20))
 
         # Initialize relay states
         self.relay_states = [False] * 16  # Default to all relays OFF
@@ -241,15 +241,43 @@ class RelayApp(ctk.CTk):
         self.feedback_label = ctk.CTkLabel(self.config_frame, text="", text_color="green")
         self.feedback_label.pack(pady=5)
 
-        # Relay Buttons Section (Right)
-        ctk.CTkLabel(self.relay_frame, text="Relay Controls:").grid(row=0, column=0, columnspan=2, pady=10)
+        
 
+        # Add the manual enable image and manual switch above the relay buttons
+        self.manual_protocol_ctrl_label = ctk.CTkLabel(
+            self.relay_frame,
+            image=self.manual_disable_image,
+            text=""  # No text, only the image
+        )
+        self.manual_protocol_ctrl_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")  # Place in row 0, column 0
+
+        self.manual_switch = ctk.CTkSwitch(
+            self.relay_frame,
+            text="Protocol Ctrl",
+            command=self.toggle_manual_switch,
+            onvalue="ON",
+            offvalue="OFF",
+            width=120,  # Double the default width (default is 60)
+            height=50   # Double the default height (default is 25)
+        )
+        self.manual_switch.grid(row=0, column=1, padx=10, pady=10, sticky="w")  # Align to the left
+
+        self.manual_switch.select()  # Set the manual switch to ON
+
+        # Relay Buttons Section (Left)
+        ctk.CTkLabel(
+            self.relay_frame,
+            text="  Relay Controls:",
+            anchor="w",  # Align text to the left
+            font=("Arial", 18, "bold")  # Set font to bold
+        ).grid(row=1, column=0, columnspan=2, pady=10, sticky="w")  # Align the label to the left
+        
         self.relay_states = [False] * 16
         self.relay_buttons = []
 
-        # Create 16 relay buttons in an 8x2 grid
+        # Create 16 relay buttons in an 8x2 grid, starting from row 1
         for i in range(self.relay_quantity):
-            row = i // 2
+            row = (i // 2) + 2  # Start from row 2
             col = i % 2
             btn = ctk.CTkButton(
                 self.relay_frame,
@@ -258,27 +286,14 @@ class RelayApp(ctk.CTk):
                 border_width=2  # Set the border width to make it more bold
             )
             # Set padding for the button
-            btn.grid(row=row + 1, column=col, padx=10, pady=10, sticky="nsew")  # Adjust padx and pady as needed
+            btn.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")  # Adjust padx and pady as needed
             self.relay_buttons.append(btn)
 
         # Configure grid weights for relay buttons
         for r in range(8):  # 8 rows
-            self.relay_frame.grid_rowconfigure(r + 1, weight=1)
+            self.relay_frame.grid_rowconfigure(r + 2, weight=1)
         for c in range(2):  # 2 columns
             self.relay_frame.grid_columnconfigure(c, weight=1)
-
-        self.manual_switch = ctk.CTkSwitch(
-            self,
-            text="Protocol Ctrl",
-            command=self.toggle_manual_switch,
-            onvalue="ON",
-            offvalue="OFF",
-            width=120,  # Double the default width (default is 60)
-            height=50   # Double the default height (default is 25)
-        )
-        self.manual_switch.grid(row=9, column=0, columnspan=2, pady=10)
-
-        self.manual_switch.select(True)  # Set the manual switch to OFF
 
         # Long press variables
         self.press_start_time = None
@@ -430,16 +445,16 @@ class RelayApp(ctk.CTk):
         """Toggle the manual switch and update the switch text and relay button states."""
         if self.manual_switch.get() == "ON":
             self.manual_switch.configure(text="Protocol Ctrl")
-            # Disable all relay buttons
-            for button in self.relay_buttons:
-                button.configure(state="disabled")
-            self.toggle_led_indicator(True)  # Called here
+            self.toggle_led_indicator(True)
+
+            # Set the manual enable label to the enable image
+            self.manual_protocol_ctrl_label.configure(image=self.manual_disable_image)
         else:
             self.manual_switch.configure(text="Manual Ctrl")
-            # Enable all relay buttons
-            for button in self.relay_buttons:
-                button.configure(state="normal")
-            self.toggle_led_indicator(False)  # Called here
+            self.toggle_led_indicator(False)
+
+            # Set the manual enable label to the disable image
+            self.manual_protocol_ctrl_label.configure(image=self.manual_enable_image)
 
     def toggle_led_indicator(self, status):
         """Update the LED indicator based on the status."""
